@@ -443,4 +443,28 @@ sub find_in_path {
     return $matches[0];
 }
 
+sub do_manual {
+    require Pod::Text::Overstrike;
+
+    # First identify the pager to use:
+    my $pager;
+    if (! ($pager = $ENV{PAGER})) {
+        # No env var set. Try to find "less":
+        if (! ($pager = find_in_path('less'))) {
+            # OK, no "less". Look for "more":
+            if (! ($pager = find_in_path('more'))) {
+                # Huh?
+                $pager = '/bin/cat';
+            }
+        }
+    }
+
+    my $formatter = Pod::Text::Overstrike->new;
+    open my $to_pager, q{|-}, $pager or die "Unabled to fork: $!\n";
+    $formatter->parse_from_file($0, $to_pager);
+    close $to_pager or die "Error on $pager: $!\n";
+
+    return;
+}
+
 __END__
