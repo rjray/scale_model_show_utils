@@ -10,6 +10,8 @@ use File::Path qw(make_path remove_tree);
 use File::Spec;
 use Getopt::Long qw(GetOptionsFromArray);
 
+use Text::CSV;
+
 our $COMMAND = basename $0;
 our $VERSION = '0.2';
 
@@ -29,6 +31,9 @@ my %VERBS = (
     archive => {
         code => \&do_archive,
         opts => [ qw(command=s file=s) ],
+    },
+    manual  => {
+        code => \&do_manual,
     },
 );
 
@@ -159,8 +164,9 @@ sub do_init {
 sub read_cats_source {
     my $source = shift;
     my (@lines, @cats);
+    my $csv = Text::CSV->new;
 
-    if (open my $fh, '<', $source) {
+    if (open my $fh, '<:encoding(utf8)', $source) {
         @lines = <$fh>;
         close $fh or die "Error closing source-file '$source': $!\n";
         chomp @lines;
@@ -169,9 +175,12 @@ sub read_cats_source {
     }
 
     for my $line (@lines) {
-        next if ($line !~ /^\d/);
+        next if (! $line);
+        next if ($line =~ /^#/);
 
-        push @cats, (split /,/ => $line)[0];
+        if ($csv->parse($line)) {
+            push @cats, ($csv->fields)[0];
+        }
     }
 
     return @cats;
