@@ -112,6 +112,7 @@ archive   Archive the presentation.
                             given a suffix based on the archive command used,
                             so do not include the suffix in this name.
 
+manual    Display the full manual page.
 USAGE
 
     if ($args[0] && $args[0] =~ /^-{1,2}h(?:elp)?$/) {
