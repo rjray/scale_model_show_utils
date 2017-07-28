@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 
+use 5.010;
 use strict;
 use warnings;
 
@@ -23,7 +24,7 @@ my %VERBS = (
     },
     copy    => {
         code => \&do_copy,
-        opts => [ qw(only=s@ slides=s) ],
+        opts => [ qw(only=s@ slides=s skip=i) ],
     },
     cleanup => {
         code => \&do_cleanup,
@@ -190,6 +191,7 @@ sub do_copy {
     my $env = shift;
     my @words = @{$env->{words}};
     my ($catdir, $predir, @cats, @only, $slides, @cat_errors, @missing_slides);
+    my $skip = $env->{skip} || 0;
 
     if (@words > 1) {
         ($catdir, $predir) = @words;
@@ -230,8 +232,9 @@ sub do_copy {
     }
 
     for my $cat (filter_cats(\@cats, \@only)) {
+        my $category_path = File::Spec->catdir($catdir, $cat);
         copy_category(
-            $cat, File::Spec->catdir($catdir, $cat), $predir, \@cat_errors
+            $cat, $category_path, $predir, $skip, \@cat_errors
         );
 
         $slides && copy_slide($cat, $slides, $predir, \@missing_slides);
@@ -265,7 +268,7 @@ sub filter_cats {
 
 sub img_filename {
     my ($cat, $seq) = @_;
-    my ($catnum, $catsfx);
+    my ($catnum, $catsfx, $name);
 
     if ($cat =~ $CAT_RE) {
         ($catnum, $catsfx) = ($1, $2);
@@ -273,11 +276,17 @@ sub img_filename {
         die "Bad category in img_filename: $cat\n";
     }
 
-    return sprintf '%04d%s-%d.jpg', $catnum, $catsfx, $seq;
+    if (defined $seq) {
+        $name = sprintf '%04d%s-%d.jpg', $catnum, $catsfx, $seq;
+    } else {
+        $name = sprintf '%04d%s.jpg', $catnum, $catsfx;
+    }
+
+    return $name;
 }
 
 sub copy_category {
-    my ($cat, $from, $to, $err_list) = @_;
+    my ($cat, $from, $to, $skip, $err_list) = @_;
     my @files;
     my $counter = 0;
 
@@ -290,6 +299,11 @@ sub copy_category {
 
     print "Processing category $cat:\n";
     for my $file (@files) {
+        if ($skip) {
+            $skip--;
+            next;
+        }
+
         $counter++;
         my $newfile = img_filename($cat, $counter);
         print "\tFile $file -> $newfile\n";
@@ -325,16 +339,25 @@ sub copy_category {
 sub copy_slide {
     my ($cat, $slidesdir, $to, $missing_list) = @_;
 
-    my $slidename = img_filename($cat, 0);
-    my $slidefile = File::Spec->catfile($slidesdir, $slidename);
+    my $name1 = img_filename($cat, 0);
+    my $file1 = File::Spec->catfile($slidesdir, $name1);
+    my $name2 = img_filename($cat);
+    my $file2 = File::Spec->catfile($slidesdir, $name2);
 
-    if (-f $slidefile) {
-        my $to_file = File::Spec->catfile($to, $slidename);
+    if (-f $file1) {
+        my $to_file = File::Spec->catfile($to, $name1);
         if (-f $to_file) {
             unlink $to_file;
         }
 
-        cp $slidefile, $to_file;
+        cp $file1, $to_file;
+    } elsif (-f $file2) {
+        my $to_file = File::Spec->catfile($to, $name2);
+        if (-f $to_file) {
+            unlink $to_file;
+        }
+
+        cp $file2, $to_file;
     } else {
         warn "No slide file found for category $cat.\n";
         push @{$missing_list}, $cat;
@@ -562,9 +585,9 @@ not passed, it defaults to F<Presentation> (relative to the current directory).
 =item C<--slides> I<directory>
 
 If given, use F<directory> as the source of slides for each category. Slides
-are expected to be named F<catnumber-0.jpg> (the category number, followed by
-a hyphen and the numeral 0). If this option is not given, no slides are
-searched for.
+are expected to be named either F<catnumber-0.jpg> (the category number,
+followed by a hyphen and the numeral 0) or simply F<catnumber.jpg>. If this
+option is not given, no slides are searched for.
 
 =item C<--only> I<cat1,cat2,...>
 
