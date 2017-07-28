@@ -477,3 +477,188 @@ sub do_manual {
 }
 
 __END__
+
+=head1 NAME
+
+contest_tool.pl - Manage photos for a contest awards presentation
+
+=head1 USAGE
+
+    contest_tool.pl <action> <options>
+
+=head1 DESCRIPTION
+
+This tool manages the creation of directories for contest categories and creates
+an ordered sequence of photos for the awards presentation.
+
+The tool creates a directory structure from a file listing the categories (one
+per line) in CSV (comma-separated values) format. Photo files are put into the
+directories manually, with the photos of winners ordered in the sequence you
+want them in the presentation (usually in reverse order of place). Then, the
+tool can create a presentation by ordering the photos based on category order
+and file sequence order.
+
+The tool can also create an archive of the presentation, if desired.
+
+=head1 OPTIONS
+
+The command is invoked with one action-word (the "verb") and zero or more
+options following it. The set of allowed verbs are:
+
+=head2 init
+
+Initialize a categories directory using data from a provided CSV file. Each
+line of the file is read, with any line that starts with a C<#> character being
+ignored as a comment line. Blank lines are also ignored. Within the CSV data,
+the first column is expected to be the category number, and all other columns
+are ignored (by this tool). Each category will have a directory created for it.
+
+The B<init> verb takes one or two arguments, in specific order:
+
+=over 4
+
+=item I<categories-dir>
+
+Optional. This value specifies the name to give the parent directory of all the
+category directories. This value may be a relative path or an absolute path. If
+this value is not passed, then the default name of F<Categories> (relative to
+the current directory) is used. The directory will be created if it does not
+already exist.
+
+=item I<datafile>
+
+Required. This value specifies the CSV data file to read category data from.
+The file does not have to have any specific suffix, but it is expected to be in
+simple ASCII or UTF-8 format plain text.
+
+=back
+
+If only one argument is given, it is assumed to be the CSV file and the default
+will be used for the categories directory.
+
+=head2 copy
+
+This action is the work-horse of the tool. It traverses the set of category
+directories and copies files into a presentation area in the proper order. When
+done, it will report on any categories that were empty or had fewer than three
+results, so that this can be cross-checked with the actual results for
+consistency.
+
+The B<copy> verb takes two optional positional arguments, and some options:
+
+=over 4
+
+=item I<categories-dir>
+
+The directory name in which the per-category directories were created. If this
+parameter is not passed, it defaults to F<Categories>, as with B<init>.
+
+=item I<presentation-dir>
+
+The name of the directory into which the presentation sequence should be
+copied. It will be created if it does not already exist. If this parameter is
+not passed, it defaults to F<Presentation> (relative to the current directory).
+
+=item C<--slides> I<directory>
+
+If given, use F<directory> as the source of slides for each category. Slides
+are expected to be named F<catnumber-0.jpg> (the category number, followed by
+a hyphen and the numeral 0). If this option is not given, no slides are
+searched for.
+
+=item C<--only> I<cat1,cat2,...>
+
+Only process the given categories, rather than traversing all sub-directories
+within the categories area. This can be helpful for categories that have to be
+re-shot, for example, and copied over without re-processing the entire
+presentation.
+
+The value of this option is one or more category numbers, separated by commas.
+This option may be specified more than once to provide more categories.
+
+=item C<--skip> I<num>
+
+Skip the first I<num> photo files in a category directory. This can be useful
+if you have additional photos (such as the category placard and/or results
+sheet, for identification purposes). Note that the skips are always from the
+first images.
+
+=back
+
+=head2 archive
+
+Create an archive of the presentation files. The archive is created of the
+entire presentation directory, so it will get any slides or ancillary images
+that you may have added into there. The archive will be a directory (folder),
+using the presentation directory as the top-level.
+
+The B<archive> verb takes one optional positional argument, and some options:
+
+=over 4
+
+=item I<presentation-dir>
+
+The name of the presentation directory that was created/used in the B<copy>
+step. If this is not passed, it defaults to F<Presentation> relative to the
+current directory.
+
+Note that if the value of this argument has more than one directory element to
+it, the resulting archive will still only have a folder-depth of 1.
+
+=item C<--command> I<name>
+
+Specify an alternate location for the archive command to use, or force a
+different command than the default. The default behavior is to use the B<zip>
+command if it is found on the system, or the B<tar> command otherwise. If no
+command is found, an error occurs. If the value of this option is an absolute
+path, only it will be checked for existence. (A relative path will be searched
+through the user's PATH environment.)
+
+Currently, only the B<zip> and B<tar> commands are supported.
+
+=item C<--file> I<path>
+
+Specify an alternate file name for the archive that gets created. If not
+passed, then the presentation directory name will be used, with an appropriate
+suffix. If passed, this value should I<not> have the file extension. That will
+be added by the tool when creating the file.
+
+=back
+
+The archive file is, by default, created in the current working directory.
+
+=head2 cleanup
+
+Clean up the working area of the directories and photo files. Basically the
+same as doing recursive removal of the directories, but is available here as a
+short-cut to doing so manually.
+
+The B<cleanup> verb take two optional positional arguments:
+
+=over 4
+
+=item I<categories-dir>
+
+The directory name in which the per-category directories were created. If this
+parameter is not passed, it defaults to F<Categories>, as with B<init>.
+
+=item I<presentation-dir>
+
+The name of the directory into which the presentation was created. If not
+passed, this defaults to F<Presentation> as with B<copy>.
+
+=back
+
+=head2 manual
+
+This action displays this manual page.
+
+=head1 LICENSE AND COPYRIGHT
+
+Copying and distribution are permitted under the terms of the Apache License
+Version 2.0 (L<http://www.apache.org/licenses/>). A copy of this license is
+distributed with this project in the file F<LICENSE>.
+
+=head1 AUTHOR
+
+Randy J. Ray C<< <rjray@blackperl.com> >>.
