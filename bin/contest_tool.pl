@@ -191,7 +191,8 @@ sub read_cats_source {
 sub do_copy {
     my $env = shift;
     my @words = @{$env->{words}};
-    my ($catdir, $predir, @cats, @only, $slides, @cat_errors, @missing_slides);
+    my ($catdir, $predir, @cats, @only, $slides, @cat_errors, @missing_slides,
+        $catslides);
     my $skip = $env->{skip} || 0;
 
     if (@words > 1) {
@@ -209,7 +210,9 @@ sub do_copy {
     }
 
     if ($slides = $env->{slides}) {
-        if (! -d $slides) {
+        if (-d $slides) {
+            $catslides = read_slides_dir($slides);
+        } else {
             warn "Specified slides directory ($slides) not present. " .
                 "Ignoring...\n";
             $slides = q{};
@@ -238,10 +241,45 @@ sub do_copy {
             $cat, $category_path, $predir, $skip, \@cat_errors
         );
 
-        $slides && copy_slide($cat, $slides, $predir, \@missing_slides);
+        $slides && copy_slide($cat, $catslides, $predir, \@missing_slides);
+    }
+
+    if (@cat_errors) {
+        print "Double-check the following categories:\n\n";
+        for my $error (@cat_errors) {
+            my ($cat, $count) = @{$error};
+
+            printf "\tCategory %s: %d %s\n", $cat, $count,
+                $count == 1 ? 'entry' : 'entries';
+        }
+        print "\n";
+    }
+    if (@missing_slides) {
+        print "The following category slides were not found:\n\n\t";
+        local $" = "\n\t";
+        print "@missing_slides\n\n";
     }
 
     return;
+}
+
+sub read_slides_dir {
+    my $dir = shift;
+    my $slides = {};
+    my @files;
+
+    if (opendir my $dh, $dir) {
+        @files = grep { /[.]jpg$/i } readdir $dh;
+        closedir $dh;
+    } else {
+        die "Error opening directory $dir for reading: $!\n";
+    }
+
+    for my $file (@files) {
+        $slides->{lc $file} = "$dir/$file";
+    }
+
+    return $slides;
 }
 
 sub as_categories {
@@ -338,28 +376,24 @@ sub copy_category {
 }
 
 sub copy_slide {
-    my ($cat, $slidesdir, $to, $missing_list) = @_;
+    my ($cat, $slides, $to, $missing_list) = @_;
+    my $found = 0;
 
-    my $name1 = img_filename($cat, 0);
-    my $file1 = File::Spec->catfile($slidesdir, $name1);
-    my $name2 = img_filename($cat);
-    my $file2 = File::Spec->catfile($slidesdir, $name2);
+    for my $file ("$cat.jpg", "$cat-0.jpg") {
+        if ($slides->{$file}) {
+            my $to_file = File::Spec->catfile($to, "$cat-0.jpg");
+            if (-f $to_file) {
+                unlink $to_file;
+            }
 
-    if (-f $file1) {
-        my $to_file = File::Spec->catfile($to, $name1);
-        if (-f $to_file) {
-            unlink $to_file;
+            print "\tSlide $slides->{$file} -> $to_file\n";
+            cp $slides->{$file}, $to_file;
+            $found++;
+            last;
         }
+    }
 
-        cp $file1, $to_file;
-    } elsif (-f $file2) {
-        my $to_file = File::Spec->catfile($to, $name2);
-        if (-f $to_file) {
-            unlink $to_file;
-        }
-
-        cp $file2, $to_file;
-    } else {
+    if (! $found) {
         warn "No slide file found for category $cat.\n";
         push @{$missing_list}, $cat;
     }
