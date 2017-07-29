@@ -19,10 +19,13 @@ our $VERSION = '0.2';
 my $CAT_RE = qr/(\d+)(\w?)/;
 
 my %VERBS = (
-    init    => {
+    init => {
         code => \&do_init,
     },
-    copy    => {
+    'show-empty' => {
+        code => \&do_show_empty,
+    },
+    copy => {
         code => \&do_copy,
         opts => [ qw(only=s@ slides=s skip=i) ],
     },
@@ -33,7 +36,7 @@ my %VERBS = (
         code => \&do_archive,
         opts => [ qw(command=s file=s) ],
     },
-    manual  => {
+    manual => {
         code => \&do_manual,
     },
 );
@@ -53,66 +56,73 @@ USAGE: $COMMAND <verb> [ args ... ]
 
 Where <verb> is one of:
 
-init      Initialize the category structure.
+init        Initialize the category structure.
 
-          'init' must be followed by the name of the file containing the
-          category information. This file should consist of lines of comma-
-          separated data, with the category number being the first element of
-          each line. Blank lines and lines that start with non-numbers are
-          ignored.
+            'init' must be followed by the name of the file containing the
+            category information. This file should consist of lines of comma-
+            separated data, with the category number being the first element of
+            each line. Blank lines and lines that start with non-numbers are
+            ignored.
 
-          An optional second argument is treated as the name of the categories
-          directory to create. If not passed, it defaults to "Categories" (in
-          the current directory).
+            An optional second argument is treated as the name of the categories
+            directory to create. If not passed, it defaults to "Categories" (in
+            the current directory).
 
-copy      Copy files from categories to the presentation area.
+show-empty  Display a list of all category directories that currently have no
+            images in them.
 
-          'copy' should be followed by the names of the categories top-level
-          directory, and the name of the directory for the presentation. If
-          only one element is present, it is assumed to be the presentation
-          name and the default categories location of "Categories" is assumed.
-          If no elements are given, "Categories" and "Presentation" are used.
+            'show-empty' should be followed by the name of the categories
+            directory. If one is not passed, the default of "Categories" is
+            assumed.
 
-          'copy' takes the following optional arguments:
+copy        Copy files from categories to the presentation area.
 
-          --only <list>    <list> is a comma-separated list of one or more
-                           category numbers. Only those specified will be
-                           copied. Any others will be silently skipped. This
-                           option may be provided more than once, and all
-                           values will be gathered together.
+            'copy' should be followed by the names of the categories directory,
+            and the name of the directory for the presentation. If only one
+            element is present, it is assumed to be the presentation name and
+            the default categories location of "Categories" is assumed. If no
+            elements are given, "Categories" and "Presentation" are used.
 
-          --slides <dir>   <dir> is a directory name in which the slides for
-                           each category can be found. If not given, no slides
-                           will be looked for. If given, any category that
-                           gets processed but has no slide will be reported.
+            'copy' takes the following optional arguments:
 
-cleanup   Clean up presentation and/or categories.
+            --only <list>    <list> is a comma-separated list of one or more
+                             category numbers. Only those specified will be
+                             copied. Any others will be silently skipped. This
+                             option may be provided more than once, and all
+                             values will be gathered together.
 
-          'cleanup' should be followed by one or two directory names,
-          signalling what to clean up. If none are passed, then "Categories"
-          and "Presentation" are assumed. If only one is passed, then only
-          that directory is cleaned; the onther is not assumed.
+            --slides <dir>   <dir> is a directory name in which the slides for
+                             each category can be found. If not given, no slides
+                             will be looked for. If given, any category that
+                             gets processed but has no slide will be reported.
 
-archive   Archive the presentation.
+cleanup     Clean up presentation and/or categories.
 
-          'archive' creates an archive of the presentation. It should be
-          followed by name of the presentation directory, defaulting to
-          "Presentation" if none is given.
+            'cleanup' should be followed by one or two directory names,
+            signalling what to clean up. If none are passed, then "Categories"
+            and "Presentation" are assumed. If only one is passed, then only
+            that directory is cleaned; the onther is not assumed.
 
-          'archive' takes the following arguments:
+archive     Archive the presentation.
 
-          --command <path>  The archive command to use. Defaults to 'zip' if
-                            found on the system, or 'tar' otherwise. If none
-                            are found, an error will be thrown. May be a full
-                            path. Must resolve to one of 'tar' or 'zip'.
+            'archive' creates an archive of the presentation. It should be
+            followed by name of the presentation directory, defaulting to
+            "Presentation" if none is given.
 
-          --file <path>     Name of the archive file to create. If not given,
-                            then the name of the presentation directory is
-                            used. Note that the file will be automatically
-                            given a suffix based on the archive command used,
-                            so do not include the suffix in this name.
+            'archive' takes the following arguments:
 
-manual    Display the full manual page.
+            --command <path>  The archive command to use. Defaults to 'zip' if
+                              found on the system, or 'tar' otherwise. If none
+                              are found, an error will be thrown. May be a full
+                              path. Must resolve to one of 'tar' or 'zip'.
+
+            --file <path>     Name of the archive file to create. If not given,
+                              then the name of the presentation directory is
+                              used. Note that the file will be automatically
+                              given a suffix based on the archive command used,
+                              so do not include the suffix in this name.
+
+manual      Display the full manual page.
 USAGE
 
     if ($args[0] && $args[0] =~ /^-{1,2}h(?:elp)?$/) {
@@ -138,16 +148,31 @@ USAGE
     return \%env;
 }
 
+# Common sort predicate for sorting the list of categories while accounting
+# for split suffixes.
+sub as_categories {
+    my ($anum, $asfx) = $a =~ $CAT_RE;
+    my ($bnum, $bsfx) = $b =~ $CAT_RE;
+
+    return ($anum <=> $bnum) || ($asfx cmp $bsfx);
+}
+
 sub do_init {
     my $env = shift;
     my @words = @{$env->{words}};
+    my ($catdir, @categories);
 
     if (! @words) {
         die "'init' requires at least a file of categories.\n";
     }
 
-    my @categories = read_cats_source($words[0]);
-    my $catdir = $words[1] || 'Categories';
+    if ($words[1]) {
+        @categories = read_cats_source($words[1]);
+        $catdir = $words[0];
+    } else {
+        @categories = read_cats_source($words[0]);
+        $catdir = 'Categories';
+    }
 
     if (! -d $catdir) {
         print "Creating directory '$catdir'.\n";
@@ -186,6 +211,53 @@ sub read_cats_source {
     }
 
     return @cats;
+}
+
+sub do_show_empty {
+    my $env = shift;
+    my @words = @{$env->{words}};
+    my @cats;
+
+    my $catdir = $words[0] || 'Categories';
+
+    if (opendir my $dh, $catdir) {
+        @cats = grep { /^\d/ } readdir $dh;
+        closedir $dh;
+    } else {
+        die "Error opening dir $catdir for reading: $!\n";
+    }
+
+    my @empty = grep { empty_cat_dir($catdir, $_) } (sort as_categories @cats);
+
+    if (@empty) {
+        my $count = scalar @empty;
+        printf "There are %d empty category director%s:\n\n\t",
+            $count, $count == 1 ? 'y' : 'ies';
+        local $" = "\n\t";
+        print "@empty\n";
+    } else {
+        print "No empty category directories.\n";
+    }
+
+    return;
+}
+
+sub empty_cat_dir {
+    my ($catdir, $dir) = @_;
+    my $empty = 0;
+    my $path = File::Spec->catdir($catdir, $dir);
+
+    if (opendir my $dh, $path) {
+        my @files = grep { ! /^[.]{1,2}$/ } readdir $dh;
+        closedir $dh;
+        if (! @files) {
+            $empty = 1;
+        }
+    } else {
+        die "Error opening $path for reading: $!\n";
+    }
+
+    return $empty;
 }
 
 sub do_copy {
@@ -280,13 +352,6 @@ sub read_slides_dir {
     }
 
     return $slides;
-}
-
-sub as_categories {
-    my ($anum, $asfx) = $a =~ $CAT_RE;
-    my ($bnum, $bsfx) = $b =~ $CAT_RE;
-
-    return ($anum <=> $bnum) || ($asfx cmp $bsfx);
 }
 
 sub filter_cats {
@@ -593,6 +658,19 @@ simple ASCII or UTF-8 format plain text.
 
 If only one argument is given, it is assumed to be the CSV file and the default
 will be used for the categories directory.
+
+=head2 show-empty
+
+List all category directories that currently have no files in them. This does
+not look at the files themselves to see if they are image files, it only
+reports those directories with no content currently.
+
+The B<show-empty> verb takes one optional argument:
+
+=item I<categories-dir>
+
+The directory name in which the per-category directories were created. If this
+parameter is not passed, it defaults to F<Categories>, as with B<init>.
 
 =head2 copy
 
